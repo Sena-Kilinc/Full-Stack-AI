@@ -72,6 +72,11 @@ class Settings(BaseSettings):
     NN_MAX_ITER: int = Field(default=500, description="Neural Network - maksimum iterasyon")
     NN_ACTIVATION: str = Field(default="relu", description="Neural Network - aktivasyon fonksiyonu")
     
+    # Data Split Settings (Case Requirement)
+    USE_FIXED_SPLIT: bool = Field(default=True, description="Sabit train/test split kullan")
+    FIXED_TRAIN_SIZE: int = Field(default=150, description="Sabit train set boyutu")
+    FIXED_TEST_SIZE: int = Field(default=50, description="Sabit test set boyutu")
+    
     # Feature Engineering
     FEATURE_SELECTION: bool = Field(default=False, description="Feature selection aktif mi")
     FEATURE_SELECTION_THRESHOLD: float = Field(default=0.01, description="Feature selection eşik değeri")
@@ -236,7 +241,7 @@ if __name__ == "__main__":
     print(f"Default Algorithm: {settings.DEFAULT_ALGORITHM}")
     print(f"Available Algorithms: {settings.AVAILABLE_ALGORITHMS}")
     print("=" * 80)
-    
+
     # Algoritma parametrelerini göster
     print("\nALGORITHM PARAMETERS")
     print("=" * 80)

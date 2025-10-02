@@ -19,6 +19,7 @@ import pandas as pd
 import os
 import shutil
 from datetime import datetime
+from pathlib import Path
 
 from models import (
     ConfigRequest, ConfigResponse,
@@ -202,6 +203,76 @@ async def upload_data(file: UploadFile = File(...)):
         )
 
 
+# ============================================================================
+# EDA ENDPOINT (Case Requirement)
+# ============================================================================
+
+@app.get("/eda", tags=["Data Analysis"])
+async def run_eda_analysis():
+    """
+    Exploratory Data Analysis (Keşifsel Veri Analizi) çalıştır
+    
+    Case Requirement: Veri türlerini analiz ederek gerekli temizleme
+    ve ön işleme adımlarını göster
+    
+    Returns:
+        dict: EDA sonuçları ve oluşturulan grafik dosyaları
+    
+    Note: Bu endpoint data yüklenmiş olmalıdır
+    """
+    log_request("GET", "/eda")
+    
+    try:
+        if current_data is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Önce veri yüklemelisiniz (/upload endpoint)"
+            )
+        
+        logger.info("EDA analizi başlatılıyor...")
+        
+        # EDA analyzer oluştur
+        from eda_analysis import EDAAnalyzer
+        
+        # Geçici dosya oluştur
+        temp_file = os.path.join(settings.DATA_DIR, "temp_for_eda.xlsx")
+        current_data.to_excel(temp_file, index=False)
+        
+        # EDA çalıştır
+        analyzer = EDAAnalyzer(temp_file)
+        analyzer.run_full_analysis()
+        
+        # Oluşturulan dosyaları listele
+        eda_outputs = list(Path("eda_outputs").glob("*"))
+        
+        logger.info(f"EDA tamamlandı: {len(eda_outputs)} dosya oluşturuldu")
+        
+        return {
+            "status": "success",
+            "message": "EDA analizi tamamlandı",
+            "output_directory": "eda_outputs",
+            "generated_files": [f.name for f in eda_outputs],
+            "summary": {
+                "total_records": int(len(current_data)),
+                "total_columns": int(len(current_data.columns)),
+                "missing_values": int(current_data.isnull().sum().sum()),
+                "target_variables": {
+                    "seller_number": int(current_data['seller_number'].nunique()),
+                    "customer_number": int(current_data['customer_number'].nunique()),
+                    "main_account": int(current_data['main_account'].nunique())
+                }
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"EDA analiz hatası: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"EDA analiz hatası: {str(e)}"
+        )
+    
 # ============================================================================
 # CONFIG ENDPOINT
 # ============================================================================
@@ -454,7 +525,133 @@ async def get_metrics():
             detail=f"Metrik alma hatası: {str(e)}"
         )
 
+# ============================================================================
+# MODEL COMPARISON ENDPOINT (Case Requirement)
+# ============================================================================
 
+# ============================================================================
+# MODEL COMPARISON ENDPOINT (Case Requirement)
+# ============================================================================
+
+@app.get("/compare-models", tags=["Analysis"])
+async def compare_models():
+    """
+    Eğitilmiş tüm modelleri karşılaştır
+    
+    Case Requirement: Farklı algoritmaların performansını karşılaştır
+    ve görselleştir
+    
+    Returns:
+        dict: Model karşılaştırma sonuçları ve oluşturulan dosyalar
+    
+    Note: En az 2 farklı algoritma ile model eğitilmiş olmalıdır
+    """
+    log_request("GET", "/compare-models")
+    
+    try:
+        from model_comparison import ModelComparator
+        from pathlib import Path
+        import re
+        
+        # Models dizinini kontrol et
+        models_dir = Path(settings.MODELS_DIR)
+        if not models_dir.exists():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Henüz hiç model eğitilmemiş"
+            )
+        
+        # Eğitilmiş modelleri bul - dosya isimlerinden parse et
+        trained_models = []
+        trained_models_mapping = {}  # dosya adı -> algoritma adı
+        
+        # Tüm results_*.pkl dosyalarını bul
+        for results_file in models_dir.glob('results_*.pkl'):
+            # Dosya adından algoritma ismini çıkar
+            # Örnek: results_AlgorithmType.RANDOM_FOREST.pkl -> random_forest
+            filename = results_file.stem  # "results_AlgorithmType.RANDOM_FOREST"
+            
+            # AlgorithmType. prefix'ini kaldır
+            algo_part = filename.replace('results_', '')
+            
+            # Enum değerinden string'e dönüştür
+            if 'AlgorithmType.' in algo_part:
+                algo_part = algo_part.replace('AlgorithmType.', '')
+            
+            # RANDOM_FOREST -> random_forest
+            algo_name = algo_part.lower()
+            
+            # Geçerli algoritma mı kontrol et
+            if algo_name in settings.AVAILABLE_ALGORITHMS:
+                trained_models.append(algo_name)
+                trained_models_mapping[algo_name] = filename
+        
+        if len(trained_models) < 2:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Karşılaştırma için en az 2 model gerekli. Şu an {len(trained_models)} model var: {trained_models}. "
+                       f"Lütfen farklı algoritmalarla /config ve /train endpoint'lerini kullanarak en az 2 model eğitin."
+            )
+        
+        logger.info(f"Model karşılaştırması başlatılıyor: {trained_models}")
+        
+        # Model comparator oluştur
+        comparator = ModelComparator()
+        
+        # Sonuçları yükle
+        comparator.load_from_file(trained_models, str(models_dir))
+        
+        # Karşılaştırma analizleri
+        detailed_df, overall_df = comparator.create_comparison_table()
+        comparator.plot_comparison()
+        rankings = comparator.generate_recommendation()
+        comparator.export_report()
+        
+        # Oluşturulan dosyaları listele
+        comparison_outputs = list(Path("comparison_outputs").glob("*"))
+        
+        # En iyi algoritmayı belirle
+        best_algo = rankings[0][0]
+        best_f1 = rankings[0][1]
+        best_acc = rankings[0][2]
+        
+        logger.info(f"Model karşılaştırması tamamlandı. En iyi: {best_algo}")
+        
+        return {
+            "status": "success",
+            "message": "Model karşılaştırması tamamlandı",
+            "compared_models": trained_models,
+            "output_directory": "comparison_outputs",
+            "generated_files": [f.name for f in comparison_outputs],
+            "best_model": {
+                "algorithm": best_algo,
+                "f1_score": float(best_f1),
+                "accuracy": float(best_acc)
+            },
+            "rankings": [
+                {
+                    "rank": idx,
+                    "algorithm": algo,
+                    "f1_score": float(f1),
+                    "accuracy": float(acc)
+                }
+                for idx, (algo, f1, acc) in enumerate(rankings, 1)
+            ],
+            "summary": {
+                "total_models_compared": len(trained_models),
+                "metrics_evaluated": ["accuracy", "f1_weighted", "f1_macro", "precision", "recall"],
+                "targets_analyzed": ["seller_number", "customer_number", "main_account"]
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Model karşılaştırma hatası: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Model karşılaştırma hatası: {str(e)}"
+        )
 # ============================================================================
 # EXCEPTION HANDLERS
 # ============================================================================

@@ -229,7 +229,7 @@ class MLPipeline:
         
         Args:
             df: Ham veri
-            test_size: Test set oranı
+            test_size: Test set oranı (USE_FIXED_SPLIT=True ise kullanılmaz)
         
         Returns:
             Tuple: (X_train, X_test, y_train, y_test)
@@ -275,13 +275,32 @@ class MLPipeline:
         
         y = np.column_stack(y_encoded)
         
-        # Train/test split
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=test_size, random_state=42, shuffle=True
-        )
-        
-        logger.info(f"Train set: {X_train.shape}")
-        logger.info(f"Test set: {X_test.shape}")
+        # CASE GEREKSİNİMİ: Sabit 150/50 split
+        if settings.USE_FIXED_SPLIT:
+            train_size = min(settings.FIXED_TRAIN_SIZE, len(X))
+            test_size_actual = min(settings.FIXED_TEST_SIZE, len(X) - train_size)
+            
+            logger.info("=" * 80)
+            logger.info("CASE REQUİREMENT: Fixed 150/50 split kullanılıyor")
+            logger.info("=" * 80)
+            
+            # İlk 150 kayıt train, sonraki 50 kayıt test
+            X_train = X.iloc[:train_size]
+            X_test = X.iloc[train_size:train_size + test_size_actual]
+            y_train = y[:train_size]
+            y_test = y[train_size:train_size + test_size_actual]
+            
+            logger.info(f"Fixed train set: {X_train.shape[0]} samples")
+            logger.info(f"Fixed test set: {X_test.shape[0]} samples")
+            
+        else:
+            # Dinamik split (orijinal yöntem)
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=test_size, random_state=42, shuffle=True
+            )
+            
+            logger.info(f"Train set: {X_train.shape}")
+            logger.info(f"Test set: {X_test.shape}")
         
         return X_train, X_test, y_train, y_test
     
@@ -450,22 +469,38 @@ class MLPipeline:
     # ========================================================================
     
     def _save_model(self):
-        """Modeli ve ilgili artifactları kaydeder"""
-        try:
-            model_path = os.path.join(settings.MODELS_DIR, f'model_{self.current_algorithm}.pkl')
-            encoders_path = os.path.join(settings.MODELS_DIR, 'label_encoders.pkl')
-            features_path = os.path.join(settings.MODELS_DIR, 'feature_columns.pkl')
-            results_path = os.path.join(settings.MODELS_DIR, 'training_results.pkl')
-            
-            joblib.dump(self.algorithm, model_path)
-            joblib.dump(self.label_encoders, encoders_path)
-            joblib.dump(self.feature_columns, features_path)
-            joblib.dump(self.training_results, results_path)
-            
-            logger.info(f"Model saved: {model_path}")
-            
-        except Exception as e:
-            logger.error(f"Model save error: {str(e)}", exc_info=True)
+            """Modeli ve ilgili artifactları kaydeder"""
+            try:
+                # Algoritma adını string'e çevir (enum değilse)
+                algo_name = str(self.current_algorithm)
+                if 'AlgorithmType.' in algo_name:
+                    algo_name = algo_name.replace('AlgorithmType.', '').lower()
+                
+                # Algoritma-spesifik dosyalar (model comparison için)
+                model_path = os.path.join(settings.MODELS_DIR, f'model_{algo_name}.pkl')
+                encoders_path = os.path.join(settings.MODELS_DIR, f'encoders_{algo_name}.pkl')
+                features_path = os.path.join(settings.MODELS_DIR, f'features_{algo_name}.pkl')
+                results_path = os.path.join(settings.MODELS_DIR, f'results_{algo_name}.pkl')
+                
+                joblib.dump(self.algorithm, model_path)
+                joblib.dump(self.label_encoders, encoders_path)
+                joblib.dump(self.feature_columns, features_path)
+                joblib.dump(self.training_results, results_path)
+                
+                # Backward compatibility: genel dosyalar da kaydet (son eğitilen model için)
+                general_encoders = os.path.join(settings.MODELS_DIR, 'label_encoders.pkl')
+                general_features = os.path.join(settings.MODELS_DIR, 'feature_columns.pkl')
+                general_results = os.path.join(settings.MODELS_DIR, 'training_results.pkl')
+                
+                joblib.dump(self.label_encoders, general_encoders)
+                joblib.dump(self.feature_columns, general_features)
+                joblib.dump(self.training_results, general_results)
+                
+                logger.info(f"Model saved: {model_path}")
+                logger.info(f"Results saved: {results_path}")
+                
+            except Exception as e:
+                logger.error(f"Model save error: {str(e)}", exc_info=True)
     
     def load_model(self, algorithm: str):
         """Kaydedilmiş modeli yükler"""

@@ -81,6 +81,66 @@ class FeatureEngineer:
         
         return df
     
+    def extract_tfidf_features(self, df: pd.DataFrame, is_training: bool = True) -> pd.DataFrame:
+        """
+        Description alanından TF-IDF features çıkarır (NLP tekniği)
+        
+        Case Requirement: NLP, TF-IDF kullanımı
+        """
+        from sklearn.feature_extraction.text import TfidfVectorizer
+        
+        print("🔧 TF-IDF features oluşturuluyor...")
+        
+        df = df.copy()
+        
+        if is_training:
+            # Training: Yeni vectorizer oluştur
+            self.tfidf_vectorizer = TfidfVectorizer(
+                max_features=20,  # Top 20 kelime
+                min_df=2,  # En az 2 dokümanda geçmeli
+                max_df=0.8,  # Maks %80 dokümanda
+                ngram_range=(1, 2),  # Unigram ve bigram
+                stop_words=None  # Türkçe için custom stop words eklenebilir
+            )
+            
+            tfidf_matrix = self.tfidf_vectorizer.fit_transform(
+                df['description'].fillna('').astype(str)
+            )
+            
+            # TF-IDF features'ı dataframe'e ekle
+            feature_names = self.tfidf_vectorizer.get_feature_names_out()
+            tfidf_df = pd.DataFrame(
+                tfidf_matrix.toarray(),
+                columns=[f'tfidf_{name}' for name in feature_names],
+                index=df.index
+            )
+            
+            df = pd.concat([df, tfidf_df], axis=1)
+            
+            print(f"   ✓ {len(feature_names)} TF-IDF feature oluşturuldu")
+            print(f"   Top 5 terms: {list(feature_names[:5])}")
+            
+        else:
+            # Inference: Mevcut vectorizer'ı kullan
+            if hasattr(self, 'tfidf_vectorizer'):
+                tfidf_matrix = self.tfidf_vectorizer.transform(
+                    df['description'].fillna('').astype(str)
+                )
+                
+                feature_names = self.tfidf_vectorizer.get_feature_names_out()
+                tfidf_df = pd.DataFrame(
+                    tfidf_matrix.toarray(),
+                    columns=[f'tfidf_{name}' for name in feature_names],
+                    index=df.index
+                )
+                
+                df = pd.concat([df, tfidf_df], axis=1)
+            else:
+                # Vectorizer yoksa boş columns ekle
+                print("   ⚠ TF-IDF vectorizer bulunamadı, inference için sıfırlar kullanılıyor")
+        
+        return df
+    
     def create_business_rules_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         İş kurallarına dayalı özellikler oluşturur.
@@ -236,6 +296,7 @@ class FeatureEngineer:
         # Pipeline adımları
         df = self.handle_missing_values(df)
         df = self.extract_description_features(df)
+        df = self.extract_tfidf_features(df, is_training)  # YENİ: TF-IDF
         df = self.create_business_rules_features(df)
         df = self.create_target_hints(df)
         df = self.encode_categorical_features(df, is_training)
@@ -244,7 +305,7 @@ class FeatureEngineer:
         print("✅ FEATURE ENGINEERING TAMAMLANDI")
         print("="*80)
         print(f"📊 Çıkış: {df.shape[0]} satır, {df.shape[1]} sütun")
-        print(f"🎯 Oluşturulan toplam özellik sayısı: {df.shape[1] - 10}")  # Original 10 sütun var
+        print(f"🎯 Oluşturulan toplam özellik sayısı: {df.shape[1] - 10}")
         
         return df
     

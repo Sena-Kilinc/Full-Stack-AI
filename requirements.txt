@@ -13,6 +13,10 @@ joblib==1.3.2
 # Excel okuma
 openpyxl==3.1.2
 
+# Visualization (EDA için)
+matplotlib==3.8.2
+seaborn==0.13.0
+
 # HTTP istekleri (health check için)
 requests==2.31.0
 httpx==0.25.1
