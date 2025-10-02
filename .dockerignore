@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+myenv/
+ENV/
+*.egg
+*.egg-info/
+dist/
+build/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Logs
+logs/
+*.log
+
+# Test files
+tests/
+.pytest_cache/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Data (büyük dosyaları hariç tut)
+*.xlsx
+*.csv
+data_with_features.csv
+
+# Temporary files
+*.tmp
+temp/
