@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   ml-pipeline-service:
     build:
@@ -13,17 +11,10 @@ services:
       - ./data:/app/data
       - ./models:/app/models
       - ./logs:/app/logs
-      - ./eda_outputs:/app/eda_outputs  # YENİ: EDA çıktıları
-      - ./comparison_outputs:/app/comparison_outputs  # YENİ: Model karşılaştırma
-      # Development için source code mounting
-      - ./main.py:/app/main.py
-      - ./models.py:/app/models.py
-      - ./ml_pipeline.py:/app/ml_pipeline.py
-      - ./feature_engineering.py:/app/feature_engineering.py
-      - ./config.py:/app/config.py
-      - ./logger.py:/app/logger.py
-      - ./eda_analysis.py:/app/eda_analysis.py  # YENİ
-      - ./model_comparison.py:/app/model_comparison.py  # YENİ
+      - ./eda_outputs:/app/eda_outputs
+      - ./comparison_outputs:/app/comparison_outputs
+      # Development için source code mounting - tüm dosyalar için
+      - .:/app
     environment:
       # Application settings
       - APP_NAME=ML Pipeline API
@@ -39,6 +30,8 @@ services:
       - DATA_DIR=/app/data
       - MODELS_DIR=/app/models
       - LOGS_DIR=/app/logs
+      - EDA_OUTPUTS_DIR=/app/eda_outputs
+      - COMPARISON_OUTPUTS_DIR=/app/comparison_outputs
       
       # Logging
       - LOG_LEVEL=INFO
@@ -48,9 +41,9 @@ services:
       - DEFAULT_TEST_SIZE=0.25
       - DEFAULT_RANDOM_STATE=42
       - DEFAULT_ALGORITHM=random_forest
-      - USE_FIXED_SPLIT=true  # YENİ: Case requirement
-      - FIXED_TRAIN_SIZE=150  # YENİ: Case requirement
-      - FIXED_TEST_SIZE=50    # YENİ: Case requirement
+      - USE_FIXED_SPLIT=true
+      - FIXED_TRAIN_SIZE=150
+      - FIXED_TEST_SIZE=50
       
       # Performance
       - PYTHONUNBUFFERED=1
@@ -67,10 +60,3 @@ services:
 networks:
   ml-network:
     driver: bridge
-
-volumes:
-  data-volume:
-  models-volume:
-  logs-volume:
-  eda-volume:  # YENİ
-  comparison-volume:  # YENİ
